@@ -696,6 +696,47 @@ public class RedmineManager {
 	public void shutdown() {
 		transport.shutdown();
 	}
+	
+   /**
+     * Uploads an attachement. If content length is nonnegative, then 
+     * <code>content</code> should have exactly <code>contentLength</code>
+     * bytes available to read. If content lenght is set incorrectly, then
+     * result is not specified.
+     * 
+     * @param fileName
+     *            file name of the attachment.
+     * @param contentType
+     *            content type of the attachment.
+     * @param contentLength
+     *            length of a content. It should be -1 or a nonnegative number.
+     * @param content
+     *            attachment content stream.
+     * @return attachment content.
+     * @throws RedmineException
+     *             if something goes wrong.
+     * @throws IOException
+     *             if input cannot be read. This exception cannot be thrown yet
+     *             (I am not sure if http client can distinguish "network"
+     *             errors and local errors) but is will be good to distinguish
+     *             reading errors and transport errors.
+     */
+    public Attachment uploadAttachment(String fileName, String contentType,
+            InputStream content, long contentLength) throws RedmineException, IOException {
+        final InputStream wrapper = new MarkedInputStream(content,
+                "uploadStream");
+        final String token;
+        try {
+            token = transport.upload(wrapper, contentLength);
+            final Attachment result = new Attachment();
+            result.setToken(token);
+            result.setContentType(contentType);
+            result.setFileName(fileName);
+            return result;
+        } catch (RedmineException e) {
+            unwrapException(e, "uploadStream");
+            throw e;
+        }
+    }
 
 	/**
 	 * Uploads an attachment.
@@ -717,20 +758,7 @@ public class RedmineManager {
 	 */
 	public Attachment uploadAttachment(String fileName, String contentType,
 			InputStream content) throws RedmineException, IOException {
-		final InputStream wrapper = new MarkedInputStream(content,
-				"uploadStream");
-		final String token;
-		try {
-			token = transport.upload(wrapper);
-			final Attachment result = new Attachment();
-			result.setToken(token);
-			result.setContentType(contentType);
-			result.setFileName(fileName);
-			return result;
-		} catch (RedmineException e) {
-			unwrapException(e, "uploadStream");
-			throw e;
-		}
+	    return uploadAttachment(fileName, contentType, content, -1);
 	}
 
 	/**
@@ -770,7 +798,7 @@ public class RedmineManager {
 			byte[] content) throws RedmineException, IOException {
 		final InputStream is = new ByteArrayInputStream(content);
 		try {
-			return uploadAttachment(fileName, contentType, is);
+			return uploadAttachment(fileName, contentType, is, content.length);
 		} finally {
 			try {
 				is.close();
@@ -781,7 +809,8 @@ public class RedmineManager {
 	}
 
 	/**
-	 * Uploads an attachment.
+	 * Uploads an attachment. Due to a redmine restrictions, this method may
+	 * not uppload big files.
 	 * 
 	 * @param contentType
 	 *            content type of the attachment.
@@ -803,6 +832,42 @@ public class RedmineManager {
 		}
 	}
 
+    /**
+     * Uploads an attachment. This method can upload large files, but is
+     * less secure, than a {{@link #uploadAttachment(String, File)} method.
+     * Problem is to reliable determine and upload a file size, because file
+     * content can be changed between size check and file upload. Some efforts 
+     * are put to prevent problems in this scenario, but neverless it can't
+     * provide 100% correctness guarantee. So, this method should be used only
+     * in a "safe" system configuration, where uploading files are protected
+     * from an attacker.
+     * 
+     * @param contentType
+     *            content type of the attachment.
+     * @param content
+     *            attachment content stream.
+     * @return attachment content.
+     * @throws RedmineException
+     *             if something goes wrong.
+     * @throws IOException
+     *             if input cannot be read.
+     */
+    public Attachment uploadAttachmentUnsafe(String contentType, File content)
+            throws RedmineException, IOException {
+        final long length = content.length();
+        final InputStream is = new FileInputStream(content);
+        try {
+            final InputStream bound = new LimitedInputStream(is, length);
+            try {
+                return uploadAttachment(content.getName(), contentType, bound, length);
+            } finally {
+                bound.close();
+            }
+        } finally {
+            is.close();
+        }
+    }
+	
 	public List<Role> getRoles() throws RedmineException {
 		return transport.getObjectsList(Role.class);
 	}

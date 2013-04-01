@@ -333,9 +333,40 @@ public final class Transport {
 		final HttpGet request = new HttpGet(uri);
 		return errorCheckingCommunicator.sendRequest(request, handler);
 	}
+	
+    /**
+     * Uploads content on a server given a content length. Content length
+     * must be nonnegative or -1. If content length is nonnegative, then 
+     * <code>content</code> should have exactly <code>contentLength</code>
+     * bytes available to read. If content lenght is set incorrectly, then
+     * result is not specified.
+     * 
+     * @param content
+     *            content stream.
+     * @param contentLength
+     *            content length.
+     * @return uploaded item token.
+     * @throws RedmineException
+     *             if something goes wrong.
+     */
+    public String upload(InputStream content, long contentLength) throws RedmineException {
+        if (contentLength < -1)
+            throw new IllegalArgumentException("Illegal content length " + contentLength);
+        final URI uploadURI = getURIConfigurator().getUploadURI();
+        final HttpPost request = new HttpPost(uploadURI);
+        final AbstractHttpEntity entity = new InputStreamEntity(content, contentLength);
+        /* Content type required by a Redmine */
+        entity.setContentType("application/octet-stream");
+        request.setEntity(entity);
+
+        final String result = getCommunicator().sendRequest(request);
+        return parseResponse(result, "upload",
+            RedmineJSONParser.UPLOAD_TOKEN_PARSER);
+        
+    }
 
 	/**
-	 * UPloads content on a server.
+	 * Uploads content on a server.
 	 * 
 	 * @param content
 	 *            content stream.
@@ -344,16 +375,7 @@ public final class Transport {
 	 *             if something goes wrong.
 	 */
 	public String upload(InputStream content) throws RedmineException {
-		final URI uploadURI = getURIConfigurator().getUploadURI();
-		final HttpPost request = new HttpPost(uploadURI);
-		final AbstractHttpEntity entity = new InputStreamEntity(content, -1);
-		/* Content type required by a Redmine */
-		entity.setContentType("application/octet-stream");
-		request.setEntity(entity);
-
-		final String result = getCommunicator().sendRequest(request);
-		return parseResponse(result, "upload",
-            RedmineJSONParser.UPLOAD_TOKEN_PARSER);
+	    return upload(content, -1);
 	}
 
 	/**
