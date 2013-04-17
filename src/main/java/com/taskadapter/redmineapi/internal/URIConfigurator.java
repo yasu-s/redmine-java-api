@@ -85,7 +85,10 @@ public class URIConfigurator {
 			URL url = baseURL;
 			String path = url.getPath();
 			if (!query.isEmpty()) {
-				path += "/" + query;
+			    if (path.endsWith("/"))
+			        path += query;
+			    else
+			        path += "/" + query;
 			}
 			uri = URIUtils.createURI(url.getProtocol(), url.getHost(),
 					url.getPort(), path,
